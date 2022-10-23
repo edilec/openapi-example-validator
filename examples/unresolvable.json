@@ -1,0 +1,72 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Pet store (questions this tool cannot answer)",
+    "version": "1.4.0",
+    "description": "Every construct here is reported as unchecked; none of it is reported as valid."
+  },
+  "paths": {
+    "/pets": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "A page of pets",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "https://example.invalid/schemas/pet-list.json" },
+                "example": { "items": [] }
+              },
+              "application/xml": {
+                "schema": { "type": "string" },
+                "example": "<pets/>"
+              }
+            }
+          },
+          "404": {
+            "description": "No such pet",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Loop" },
+                "example": { "detail": "missing" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Tagged" },
+              "examples": {
+                "elsewhere": { "externalValue": "https://example.invalid/examples/new-pet.json" },
+                "inline": { "value": { "name": "Hopper" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The pet that was added",
+            "content": {
+              "application/json": {
+                "example": { "id": 3 }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Loop": { "$ref": "#/components/schemas/Mirror" },
+      "Mirror": { "$ref": "#/components/schemas/Loop" },
+      "Tagged": {
+        "type": "object",
+        "patternProperties": { "^x-": { "type": "string" } },
+        "properties": { "name": { "type": "string" } }
+      }
+    }
+  }
+}

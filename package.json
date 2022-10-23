@@ -1,17 +1,51 @@
 {
   "name": "openapi-example-validator",
-  "version": "0.0.0",
-  "description": "Check OpenAPI examples against declared schemas and required fields.",
+  "version": "0.1.0",
+  "description": "Check every OpenAPI request and response example against the schema and media type that governs it, resolving bounded local references and reporting what it could not evaluate.",
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test"
+    "lint": "node --check src/text.mjs && node --check src/pointer.mjs && node --check src/document.mjs && node --check src/refs.mjs && node --check src/schema.mjs && node --check src/index.mjs && node --check bin/openapi-example-validator.mjs && node --check test/text.test.mjs && node --check test/pointer.test.mjs && node --check test/document.test.mjs && node --check test/refs.test.mjs && node --check test/schema.test.mjs && node --check test/validator.test.mjs && node --check test/media-type.test.mjs && node --check test/cli.test.mjs && node --check test/limits.test.mjs && node --check test/ordering.test.mjs && node --check test/severity-behaviour.test.mjs && node --check test/severity-table.test.mjs && node --check test/incompleteness.test.mjs && node --check test/sanitising.test.mjs && node --check test/determinism.test.mjs",
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include=src/**",
+    "example": "node bin/openapi-example-validator.mjs --spec examples/petstore.json",
+    "pack:check": "npm pack --dry-run",
+    "check": "npm run lint && npm test && npm run example && npm run pack:check"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/edilec/openapi-example-validator"
-  }
+    "url": "git+https://github.com/edilec/openapi-example-validator.git"
+  },
+  "bin": {
+    "openapi-example-validator": "./bin/openapi-example-validator.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "examples",
+    "docs",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "openapi",
+    "swagger",
+    "json-schema",
+    "example",
+    "validation",
+    "api-contract",
+    "cli"
+  ],
+  "author": "Edilec Private Limited",
+  "bugs": {
+    "url": "https://github.com/edilec/openapi-example-validator/issues"
+  },
+  "homepage": "https://github.com/edilec/openapi-example-validator#readme"
 }
