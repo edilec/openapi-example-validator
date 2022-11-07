@@ -19,13 +19,22 @@ const cli = join(projectDirectory, 'bin', 'openapi-example-validator.mjs')
  * One `incomplete = true` site decides whether a run that could not answer its
  * question reports a verdict anyway. For an `error` rule, removing an id from
  * that list turns exit 2 into exit 1, and every case in
- * `test/severity-behaviour.test.mjs` states its exit code as a literal, so all
- * twenty-nine of those are already pinned there.
+ * `test/severity-behaviour.test.mjs` states its exit code as a literal -- so
+ * most of them are pinned there already.
  *
- * The three `warning` rules are the dangerous ones. Their severity alone would
- * not stop a pass -- a warning is not an error -- so for them the membership is
- * the *only* thing between a run that checked nothing and a green build. Each
- * gets a case here that asserts exit 0 is not what happens.
+ * Two groups are not, and they are the reason this file exists.
+ *
+ * The three `warning` rules come first. Their severity alone would not stop a
+ * pass -- a warning is not an error -- so for them the membership is the *only*
+ * thing between a run that checked nothing and a green build.
+ *
+ * The second group was found by removing each of the thirty-two memberships in
+ * turn and watching what went red. `document-malformed` and
+ * `node-budget-exceeded` survived behaviourally, because the fixtures that
+ * reach them in the severity guard also trip `no-examples-declared`, which kept
+ * those runs incomplete whatever the flag said. Only a declaration comparison
+ * noticed -- and a declaration comparison is what a coordinated edit satisfies.
+ * So each of those two gets a case here where it is the *only* gap in the run.
  */
 
 let workspace = null
@@ -37,12 +46,13 @@ after(async () => {
   if (workspace !== null) await rm(workspace, { recursive: true, force: true })
 })
 
-async function run(name, document) {
+async function run(name, document, flags = []) {
   const path = join(await directory(), `${name}.json`)
   await writeFile(path, JSON.stringify(document))
-  const result = await execFileAsync(process.execPath, [cli, '--spec', path, '--json'], { cwd: projectDirectory })
+  const result = await execFileAsync(process.execPath, [cli, '--spec', path, '--json', ...flags], { cwd: projectDirectory })
     .then((value) => ({ code: 0, ...value }), (error) => ({ code: error.code, stdout: error.stdout }))
-  return { code: result.code, report: JSON.parse(result.stdout) }
+  const report = JSON.parse(result.stdout)
+  return { code: result.code, report, rules: report.findings.map((finding) => finding.ruleId) }
 }
 
 const description = (paths, extra = {}) => ({ openapi: '3.1.0', info: { title: 'Gaps', version: '1' }, paths, ...extra })
@@ -78,6 +88,32 @@ test('example-external-value: a value that was never fetched is not a value that
   assert.equal(outcome.report.summary.warnings, 1)
   assert.equal(outcome.report.summary.checked, 1, 'the inline example really was checked')
   assert.notEqual(outcome.code, 0)
+})
+
+test('document-malformed: a document that is not an OpenAPI object is a gap on its own', async () => {
+  // An array, so the run stops before it can also trip no-examples-declared and
+  // this membership becomes the only thing holding the exit code at 2.
+  const outcome = await run('not-an-object', [])
+  assert.equal(outcome.code, 2)
+  assert.equal(outcome.report.status, 'incomplete')
+  assert.deepEqual(outcome.rules, ['document-malformed'])
+  assert.equal(outcome.report.summary.errors, 1)
+  assert.equal(outcome.report.summary.warnings, 0)
+  assert.notEqual(outcome.code, 1, 'an error alone would have exited 1; the incompleteness is what does not')
+})
+
+test('node-budget-exceeded: a walk that stopped after one good example is still not a verdict', async () => {
+  const outcome = await run('budget', description({
+    '/checked': { get: { responses: { 200: { description: 'ok', content: { 'application/json': { schema: { type: 'string' }, example: 'ok' } } } } } },
+    '/unwalked': { get: { responses: { 200: { description: 'ok', content: { 'application/json': { schema: { type: 'string' }, example: 'also ok' } } } } } },
+  }), ['--max-nodes', '8'])
+  assert.equal(outcome.code, 2)
+  assert.equal(outcome.report.status, 'incomplete')
+  assert.deepEqual(outcome.rules, ['node-budget-exceeded'])
+  assert.equal(outcome.report.summary.checked, 1, 'one example really was checked, so no-examples-declared cannot carry this')
+  assert.equal(outcome.report.summary.errors, 1)
+  assert.equal(outcome.report.summary.warnings, 0)
+  assert.notEqual(outcome.code, 1, 'an error alone would have exited 1; the incompleteness is what does not')
 })
 
 test('the warning rules really are the only three that could pass without the incomplete flag', () => {
