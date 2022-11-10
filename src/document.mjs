@@ -22,6 +22,12 @@ export function isRecord(value) {
  * document that is small on disk but expensive to analyse -- a thousand
  * examples against a schema with a thousand branches -- from running forever
  * without anyone having written a timeout.
+ *
+ * `maxPatternSteps` is the same idea for the one operation a budget checked
+ * between steps cannot bound at all. A regular expression match does not yield,
+ * so `maxMillis` is never consulted while one runs; the cost of a match is
+ * therefore estimated from the pattern and the subject *before* it starts, and a
+ * match estimated over this limit is refused and reported rather than run.
  */
 export const DEFAULT_LIMITS = Object.freeze({
   maxBytes: 2097152,
@@ -34,6 +40,7 @@ export const DEFAULT_LIMITS = Object.freeze({
   maxRefDepth: 16,
   maxEvalDepth: 512,
   maxPatternLength: 200,
+  maxPatternSteps: 20000000,
   maxMillis: 5000,
 })
 

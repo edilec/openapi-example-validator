@@ -28,6 +28,8 @@ Options:
   --max-ref-depth N         Maximum "$ref" chain length (default 16)
   --max-eval-depth N        Maximum schema evaluation depth (default 512)
   --max-pattern-length N    Maximum "pattern" source length (default 200)
+  --max-pattern-steps N     Estimated work ceiling for one "pattern" match
+                            (default 20000000)
   --max-millis N            Time budget in milliseconds (default 5000)
   -h, --help                Show this help
 
@@ -62,6 +64,7 @@ const LIMIT_FLAGS = new Map([
   ['--max-ref-depth', 'maxRefDepth'],
   ['--max-eval-depth', 'maxEvalDepth'],
   ['--max-pattern-length', 'maxPatternLength'],
+  ['--max-pattern-steps', 'maxPatternSteps'],
   ['--max-millis', 'maxMillis'],
 ])
 

@@ -136,16 +136,57 @@ record that it was not.
 
 ### `pattern`
 
-A `pattern` is compiled with the Unicode flag. Two shapes are refused instead:
+A `pattern` comes out of an untrusted description, and a regular expression
+match cannot be interrupted: the engine does not yield, so `maxMillis` is never
+consulted while one runs. A deadline checked around the call cannot fire during
+it. The cost is therefore decided **before** the match starts, and a match whose
+cost this tool will not take is refused and reported as
+`schema-pattern-unsupported` -- which makes the run `incomplete`, never a pass.
 
-- a pattern longer than `maxPatternLength` (`schema-pattern-unsupported`);
-- a pattern that quantifies a group which itself contains a quantifier or an
-  alternation -- `(a+)+`, `(a|b)*` -- also `schema-pattern-unsupported`.
+A pattern is applied only when both of these hold.
 
-The second is the shape of every catastrophic-backtracking case, and the
-`pattern` comes out of an untrusted document. The refusal is deliberately
-conservative: `^(a|b)+$` is harmless and is still refused, because telling it
+**1. The pattern is inside the declared subset.** It is compiled with the
+Unicode flag and then parsed. These are refused:
+
+- a pattern longer than `maxPatternLength`;
+- a quantifier applied to a group that is not a fixed sequence of characters --
+  `(a+)+`, `(a|b)*`, `(?:-[a-z]+)*`. `(?:abc)+` is a fixed sequence and is
+  allowed;
+- two quantifiers that compete for the same characters -- `a*a*`, `\d*\d*`,
+  `[a-z]*[a-z]*`, `a*b?a*`. This is the shape a group is not needed for, and
+  the shape an earlier version of this check let through: `^a*a*a*a*a*a*a*a*a*a*$`
+  against thirty `a`s and a `b` ran for 6.8 seconds under a declared
+  100-millisecond budget;
+- lookahead or lookbehind, a backreference, or any construct the parser does not
+  model.
+
+The subset is deliberately conservative, and the refusals above are not a
+complete theory of catastrophic backtracking -- they are the shapes this tool
+will vouch for. `^(a|b)+$` is harmless and is still refused, because telling it
 apart from `^(a|a)+$` means answering the question the refusal exists to avoid.
+
+**2. This subject is affordable.** Even an unambiguous pattern is quadratic in
+the length of the subject when it is unanchored, because the engine retries at
+every starting position: `[a-z]*1` against 65,000 letters takes two seconds. So
+before each match an upper-bound estimate is computed from four counts, each of
+something the engine can be made to repeat --
+
+- the positions the match may start at: one if the pattern is anchored with
+  `^`, otherwise the subject length;
+- the alternation branches it may try;
+- the variable-length terms it may give characters back to;
+- the subject length, once for the walk itself and once more for every
+  fixed-length term that overlaps a quantifier in front of it and therefore
+  makes the engine retry
+
+-- and compared against `maxPatternSteps`. Over it, that match is not run and
+that example is reported as unchecked. Anchoring a pattern with `^` collapses
+the starting positions to one, which is why an anchored pattern is affordable
+against a subject an unanchored one is not.
+
+The estimate is an over-estimate by design: an anchored `^.*x$` is linear and is
+charged as though it were quadratic. Refusing a match that would have been quick
+costs a reported gap; running one that never returns costs the run.
 
 ### `multipleOf`
 
@@ -219,7 +260,7 @@ membership is removed.
 | `schema-malformed` | error | yes | A schema, or the value of one of its keywords, is not the shape that keyword requires. |
 | `schema-missing` | warning | yes | Examples are declared with no schema beside them, so there was nothing to check them against. |
 | `schema-pattern-invalid` | error | yes | A `pattern` is not a valid Unicode-mode regular expression, so it was not compiled. |
-| `schema-pattern-unsupported` | error | yes | A `pattern` is longer than `maxPatternLength`, or quantifies a group that itself contains a quantifier or an alternation. |
+| `schema-pattern-unsupported` | error | yes | A `pattern` is longer than `maxPatternLength`, is outside the subset this tool bounds, or would cost more than `maxPatternSteps` against this example. |
 | `schema-too-deep` | error | yes | Schema evaluation passed `maxEvalDepth`. |
 | `schema-type-invalid` | error | yes | A `type` this tool does not recognise, or a list of types in an OpenAPI 3.0 schema. |
 | `time-budget-exceeded` | error | yes | The run passed the `maxMillis` budget. |
@@ -245,7 +286,14 @@ and no limit can turn into a silent pass.
 | `maxRefDepth` | `--max-ref-depth` | 16 | the length of one `$ref` chain |
 | `maxEvalDepth` | `--max-eval-depth` | 512 | schema evaluation depth |
 | `maxPatternLength` | `--max-pattern-length` | 200 | the source length of one `pattern` |
+| `maxPatternSteps` | `--max-pattern-steps` | 20000000 | the estimated work of one `pattern` match |
 | `maxMillis` | `--max-millis` | 5000 | the whole run, measured with an injected clock |
+
+`maxMillis` is checked between steps, not during one: the walk stops at the
+first check after the budget is spent, so the step in progress is finished
+rather than interrupted. That is why the one step whose cost is not a function
+of the description's size -- matching a `pattern` -- is bounded separately, by
+`maxPatternSteps`, before it starts.
 
 An unknown limit key is a configuration error, not a default: `maxExamplesBytes`
 for `maxExampleBytes` would otherwise enforce the default while the caller

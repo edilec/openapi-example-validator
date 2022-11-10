@@ -4,7 +4,7 @@ import test from 'node:test'
 import { DEFAULT_LIMITS } from '../src/document.mjs'
 import { pointerOf } from '../src/pointer.mjs'
 import { createResolver } from '../src/refs.mjs'
-import { deepEqual, hasUnboundedNesting, isDateTime, isMultipleOf, validateExample } from '../src/schema.mjs'
+import { deepEqual, isDateTime, isMultipleOf, validateExample } from '../src/schema.mjs'
 
 function validate(value, schema, options = {}) {
   const limits = { ...DEFAULT_LIMITS, ...options.limits }
@@ -98,20 +98,25 @@ test('date-time is range checked arithmetically, because Date rolls over instead
   assert.equal(isDateTime('2024-02-29'), false)
 })
 
+/**
+ * The pattern subset seen from the validator. The analysis itself, and the
+ * measured bound on how long a refused pattern may take, are in
+ * `test/pattern.test.mjs`.
+ */
 test('a pattern whose matching cost cannot be bounded is refused rather than run', () => {
-  assert.equal(hasUnboundedNesting('^(a+)+$'), true)
-  assert.equal(hasUnboundedNesting('^(a|b)+$'), true)
-  assert.equal(hasUnboundedNesting('^(?:abc)+$'), false)
-  assert.equal(hasUnboundedNesting('^[a-z]{2,8}$'), false)
-  assert.equal(hasUnboundedNesting('^\\d{4}-\\d{2}-\\d{2}$'), false)
-  assert.equal(hasUnboundedNesting('^(a|b)$'), false)
-  assert.equal(hasUnboundedNesting('^[(+*]+$'), false)
-
   assert.deepEqual(validate('aaa', { type: 'string', pattern: '^(a+)+$' }).rules, ['schema-pattern-unsupported'])
+  assert.deepEqual(validate('aaa', { type: 'string', pattern: '^a*a*$' }).rules, ['schema-pattern-unsupported'])
   assert.deepEqual(validate('aaa', { type: 'string', pattern: '[' }).rules, ['schema-pattern-invalid'])
   assert.deepEqual(validate('aaa', { type: 'string', pattern: '^a+$' }).rules, [])
   assert.deepEqual(validate('bbb', { type: 'string', pattern: '^a+$' }).rules, ['example-pattern-mismatch'])
   assert.deepEqual(validate('a', { type: 'string', pattern: 'a'.repeat(201) }, { limits: { maxPatternLength: 200 } }).rules, ['schema-pattern-unsupported'])
+
+  // Refused for this subject, applied to a shorter one: the estimate is a
+  // function of both, and neither answer is a pass.
+  const long = 'a'.repeat(6000)
+  assert.deepEqual(validate(long, { type: 'string', pattern: '[a-z]*1' }).rules, ['schema-pattern-unsupported'])
+  assert.deepEqual(validate(long, { type: 'string', pattern: '^[a-z]*1$' }).rules, ['example-pattern-mismatch'])
+  assert.deepEqual(validate('abc1', { type: 'string', pattern: '[a-z]*1' }).rules, [])
 })
 
 test('an unsupported keyword lets an example fail but never lets it pass', () => {

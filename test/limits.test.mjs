@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import { DEFAULT_LIMITS, analyzeOpenApi } from '../src/index.mjs'
 
@@ -102,6 +104,14 @@ test('maxPatternLength bounds the pattern source, at the bound and one character
   assert.equal(rules(run(document, { maxPatternLength: pattern.length - 1 })).includes('schema-pattern-unsupported'), true)
 })
 
+test('maxPatternSteps bounds the estimated work of one match, at the bound and one step under it', () => {
+  // Unanchored, so the estimate is (length + 1) starting positions times
+  // (length + 1) characters: exactly 100 for this nine-character example.
+  const document = one({ schema: { type: 'string', pattern: '[a-z]*1' }, example: 'aaaaaaaa1' })
+  assert.deepEqual(rules(run(document, { maxPatternSteps: 100 })), [])
+  assert.deepEqual(rules(run(document, { maxPatternSteps: 99 })), ['no-examples-declared', 'schema-pattern-unsupported'])
+})
+
 test('maxMillis is measured with the injected clock, at the bound and one below it', () => {
   const document = one({ schema: { type: 'integer' }, example: 4 })
   const clock = () => 0
@@ -109,11 +119,27 @@ test('maxMillis is measured with the injected clock, at the bound and one below 
   assert.deepEqual(rules(run(document, { maxMillis: 0 }, clock)), ['time-budget-exceeded'])
 })
 
-test('every limit in the default set has a case in this file', () => {
-  const covered = new Set(Object.keys(DEFAULT_LIMITS))
-  assert.equal(covered.size, 11)
-  assert.deepEqual([...covered].sort(), [
-    'maxBytes', 'maxDepth', 'maxEvalDepth', 'maxExampleBytes', 'maxExampleDepth', 'maxExamples',
-    'maxMillis', 'maxNodes', 'maxOperations', 'maxPatternLength', 'maxRefDepth',
-  ])
+/**
+ * The coverage claim, checked against the file rather than against the table.
+ *
+ * Comparing the key set of `DEFAULT_LIMITS` with a hand-written copy of itself
+ * fails when a limit is added and passes whatever this file contains, which is
+ * not what its name says. So it reads its own source: every limit must have a
+ * case named after it, and that case must name the limit at least twice --
+ * once for the value that is accepted and once for the value that is refused.
+ */
+test('every limit in the default set has a case in this file, driven from both sides', async () => {
+  const text = await readFile(fileURLToPath(import.meta.url), 'utf8')
+  const blocks = text.split('\ntest(').slice(1)
+  const names = blocks.map((block) => /^'([^']+)'/.exec(block)?.[1] ?? '')
+  assert.equal(names.every((name) => name.length > 0), true, 'a case in this file has no title')
+
+  for (const limit of Object.keys(DEFAULT_LIMITS)) {
+    const index = names.findIndex((name) => name.startsWith(`${limit} `))
+    assert.notEqual(index, -1, `${limit} has no case in this file`)
+    const uses = blocks[index].split(`{ ${limit}:`).length - 1
+    assert.ok(uses >= 2, `${limit} is named in its case ${uses} time(s), so it is not driven from both sides`)
+  }
+
+  assert.equal(Object.keys(DEFAULT_LIMITS).length, 12)
 })

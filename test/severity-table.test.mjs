@@ -8,7 +8,7 @@ import { DEFAULT_LIMITS } from '../src/document.mjs'
 import { INCOMPLETE_RULES, RULE_SEVERITY } from '../src/index.mjs'
 
 const projectDirectory = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const SOURCE_FILES = ['src/text.mjs', 'src/pointer.mjs', 'src/document.mjs', 'src/refs.mjs', 'src/schema.mjs', 'src/index.mjs']
+const SOURCE_FILES = ['src/text.mjs', 'src/pointer.mjs', 'src/document.mjs', 'src/refs.mjs', 'src/pattern.mjs', 'src/schema.mjs', 'src/index.mjs']
 
 /**
  * The table, the documented catalog and the shipped source agree.

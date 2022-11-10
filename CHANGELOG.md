@@ -15,7 +15,7 @@ change and is recorded here.
   example in an OpenAPI 3.0 or 3.1 description against the schema declared for
   its own media type under its own operation, and return the report.
 - `openapi-example-validator` command line interface with `--spec`, `--json`,
-  `--help` and the eleven documented limit flags.
+  `--help` and the twelve documented limit flags.
 - Example positions covered: request bodies, responses, response headers, and
   path- and operation-level parameters; both `example` and `examples`, including
   an Example Object reached through a `$ref`. Declaring `example` and `examples`
@@ -35,9 +35,12 @@ change and is recorded here.
   and which are reported as unsupported. An unsupported keyword, an unsupported
   `$schema` or `jsonSchemaDialect`, or an unmodelled media type makes the run
   `incomplete`; an example under one can still fail but can never pass.
-- `pattern` compiled in Unicode mode, with patterns whose matching cost cannot be
-  bounded -- a quantified group containing a quantifier or an alternation --
-  refused as unsupported rather than run.
+- `pattern` compiled in Unicode mode and applied only inside a declared subset:
+  a quantified group that is not a fixed sequence, two quantifiers competing for
+  the same characters, lookaround and backreferences are refused as unsupported
+  rather than run. Because a regular expression match cannot be interrupted, the
+  cost of each match is estimated from the pattern and the subject before it
+  starts and refused over `maxPatternSteps`.
 - `format` asserted for `date`, `date-time` and `uuid`, checked arithmetically
   rather than through `Date`; every other format recorded as an `info` finding
   saying it was not asserted.
@@ -45,10 +48,11 @@ change and is recorded here.
   operation, the media type and the example and then into the example value.
 - Forty-eight rules with severities in one frozen table and pinned behaviourally
   through the real command line, documented in `docs/example-rules.md`.
-- Eleven explicit limits -- bytes, document depth, traversal nodes, operations,
+- Twelve explicit limits -- bytes, document depth, traversal nodes, operations,
   examples, example bytes, example depth, reference depth, evaluation depth,
-  pattern length and milliseconds -- each enforced, each wired to a flag, each
-  reported by name, and each refusing whole rather than truncating.
+  pattern length, pattern steps and milliseconds -- each enforced, each wired to
+  a flag, each reported by name, and each refusing whole rather than
+  truncating.
 - Stable output: no clock reading, no randomness, no absolute host path, no
   locale-dependent ordering, and byte-identical stdout for the same bytes.
 

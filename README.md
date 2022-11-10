@@ -119,7 +119,7 @@ bytes you already hold. Both return `{ report, version, title }`.
 | Schema subset | `type`, `enum`, `const`, `format`, numeric bounds, string bounds, `pattern`, `items`, array bounds, `uniqueItems`, `required`, `properties`, `additionalProperties`, object bounds, `allOf`, `anyOf`, `oneOf`, plus `nullable` in 3.0 |
 | Rules | 48, with severities in one frozen table and pinned behaviourally |
 | Gaps | 32 rules, every one of which makes the run `incomplete` |
-| Limits | 11, each enforced, each wired to a flag, each reported by name |
+| Limits | 12, each enforced, each wired to a flag, each reported by name |
 
 `docs/example-rules.md` is the full catalog: every rule, every limit, and the
 exact list of which schema keywords are asserted, which are annotations, and
@@ -161,10 +161,14 @@ This section is the honest part of the README. These are the things the tool
 - **`multipleOf` on non-integers is compared within a tolerance of `1e-9`.** A
   value that is a multiple only within that tolerance is reported as satisfying
   the keyword.
-- **A `pattern` that quantifies a group containing a quantifier or an
-  alternation is refused**, not applied -- deliberately conservative, because
-  telling `(a|b)+` apart from `(a|a)+` means answering the question the refusal
-  exists to avoid.
+- **A `pattern` is applied only inside a declared subset, and only when the
+  match is affordable.** A regular expression cannot be interrupted once it has
+  started, so the cost is decided before it runs: a quantified group that is not
+  a fixed sequence (`(a+)+`, `(a|b)*`), two quantifiers competing for the same
+  characters (`a*a*`), lookaround and backreferences are all refused, and a
+  match whose estimated work exceeds `maxPatternSteps` -- which an unanchored
+  pattern against a long string will -- is refused too. Each is reported and
+  makes the run `incomplete`; none of them is a pass.
 - **It checks examples, not implementations.** Nothing is executed, no request is
   made, and an example that agrees with its schema says nothing about whether the
   service would ever produce it.

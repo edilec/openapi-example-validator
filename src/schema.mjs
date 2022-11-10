@@ -20,6 +20,7 @@
  */
 
 import { isRecord } from './document.mjs'
+import { REFUSAL_REASONS, analyzePattern, estimatePatternWork } from './pattern.mjs'
 import { measureDepth, pointerOf } from './pointer.mjs'
 import { renderValue, sanitize } from './text.mjs'
 
@@ -150,66 +151,6 @@ export function checkFormat(name, text) {
   if (name === 'date-time') return isDateTime(text)
   if (name === 'uuid') return UUID.test(text)
   return true
-}
-
-/**
- * Refuse a pattern whose matching cost this tool cannot bound.
- *
- * A `pattern` comes out of an untrusted document and is compiled into a real
- * regular expression, so a document could otherwise hand the validator
- * `(a+)+$` and watch it backtrack for the rest of the afternoon. A quantifier
- * applied to a group that itself contains a quantifier or an alternation is the
- * shape every catastrophic case has, so that shape is refused as unsupported --
- * reported, and the run marked incomplete, never quietly skipped.
- *
- * This is deliberately conservative: `^(a|b)+$` is refused although it is
- * harmless, because distinguishing it from `^(a|a)+$` means solving the
- * ambiguity question the refusal exists to avoid.
- */
-export function hasUnboundedNesting(source) {
-  const stack = [{ risky: false }]
-  let index = 0
-  const top = () => stack[stack.length - 1]
-  while (index < source.length) {
-    const character = source[index]
-    if (character === '\\') {
-      index += 2
-      continue
-    }
-    if (character === '[') {
-      index += 1
-      while (index < source.length && source[index] !== ']') {
-        index += source[index] === '\\' ? 2 : 1
-      }
-      index += 1
-      continue
-    }
-    if (character === '(') {
-      stack.push({ risky: false })
-      index += 1
-      if (source[index] === '?') {
-        const prefix = /^\?(?::|=|!|<=|<!|<[^>]*>)/.exec(source.slice(index))
-        index += prefix === null ? 1 : prefix[0].length
-      }
-      continue
-    }
-    if (character === ')') {
-      const frame = stack.length > 1 ? stack.pop() : { risky: top().risky }
-      const quantifier = /^(?:[*+?]|\{\d+(?:,\d*)?\})\??/.exec(source.slice(index + 1))
-      if (quantifier !== null && frame.risky) return true
-      if (quantifier !== null) top().risky = true
-      else if (frame.risky) top().risky = true
-      index += 1 + (quantifier === null ? 0 : quantifier[0].length)
-      continue
-    }
-    if (character === '|' || character === '*' || character === '+' || character === '?' || character === '{') {
-      top().risky = true
-      index += 1
-      continue
-    }
-    index += 1
-  }
-  return false
 }
 
 /* -------------------------------------------------------------------------- */
@@ -582,6 +523,13 @@ function stringChecks(value, node, parts, path, state, push, bad) {
 
   if (Object.hasOwn(node, 'pattern')) {
     const compiled = compilePattern(node.pattern, state)
+    const refuse = (message, suggestion) => push(schemaProblem(
+      'schema-pattern-unsupported',
+      [...parts, 'pattern'],
+      `${message} So ${at(path)} was not checked against it.`,
+      typeof node.pattern === 'string' ? node.pattern : typeof node.pattern,
+      suggestion,
+    ))
     if (compiled.ok === false) {
       push(schemaProblem(
         compiled.ruleId,
@@ -590,8 +538,25 @@ function stringChecks(value, node, parts, path, state, push, bad) {
         typeof node.pattern === 'string' ? node.pattern : typeof node.pattern,
         compiled.suggestion,
       ))
-    } else if (!compiled.expression.test(value)) {
-      push(valueProblem(state, 'example-pattern-mismatch', path, `The example at ${here} does not match the declared pattern.`, renderValue(value, 80)))
+    } else {
+      /**
+       * The cost of this match against *this* subject, decided before it runs.
+       *
+       * A regular expression cannot be interrupted once it has started -- the
+       * engine does not yield, so `maxMillis` is never checked during a match
+       * -- which is why the estimate is made first and the match is refused
+       * rather than attempted and abandoned.
+       */
+      const work = estimatePatternWork(compiled.analysis, value.length)
+      if (work > state.limits.maxPatternSteps) {
+        refuse(
+          `Matching this pattern against a ${characters}-character example is estimated at ${renderWork(work)} step(s), `
+          + `over the maxPatternSteps limit of ${state.limits.maxPatternSteps}, so it was not applied.`,
+          'Raise --max-pattern-steps deliberately, anchor the pattern with "^", or shorten the example.',
+        )
+      } else if (!compiled.expression.test(value)) {
+        push(valueProblem(state, 'example-pattern-mismatch', path, `The example at ${here} does not match the declared pattern.`, renderValue(value, 80)))
+      }
     }
   }
 
@@ -640,19 +605,25 @@ function compilePattern(source, state) {
         message: 'This pattern is not a valid Unicode-mode regular expression, so it was not compiled.',
         suggestion: 'Correct the pattern, escaping any literal "{", "}" or "\\".',
       }
-    } else if (hasUnboundedNesting(source)) {
-      result = {
-        ok: false,
-        ruleId: 'schema-pattern-unsupported',
-        message: 'This pattern quantifies a group that itself contains a quantifier or an alternation, a shape whose matching cost this tool will not bound, so it was not applied.',
-        suggestion: 'Rewrite the pattern without a quantified group of alternatives.',
-      }
     } else {
-      result = { ok: true, expression }
+      const analysis = analyzePattern(source)
+      result = analysis.ok
+        ? { ok: true, expression, analysis }
+        : {
+          ok: false,
+          ruleId: 'schema-pattern-unsupported',
+          message: `This pattern ${REFUSAL_REASONS[analysis.reason]}, which is outside the subset whose matching cost this tool bounds, so it was not applied.`,
+          suggestion: 'Rewrite the pattern inside the supported subset, or check these examples by hand.',
+        }
     }
   }
   state.patterns.set(source, result)
   return result
+}
+
+/** A work estimate in a report: a whole number, or the word for one too large to be one. */
+function renderWork(work) {
+  return Number.isFinite(work) ? Math.ceil(work).toString() : 'unbounded'
 }
 
 function boundChecks(size, minimumKeyword, maximumKeyword, unit, node, parts, path, state, push, bad) {
