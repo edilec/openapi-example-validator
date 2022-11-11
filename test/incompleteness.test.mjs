@@ -116,6 +116,55 @@ test('node-budget-exceeded: a walk that stopped after one good example is still 
   assert.notEqual(outcome.code, 1, 'an error alone would have exited 1; the incompleteness is what does not')
 })
 
+/**
+ * The document-level dialect, which nothing else in the suite reaches.
+ *
+ * `schema-dialect-unsupported` has a behavioural case already, but it gets
+ * there through a Schema Object's own `$schema`. The document-level
+ * `jsonSchemaDialect` branch is a second way to the same rule id, and the whole
+ * of `checkDocumentDialect` could be replaced by `return` with every test in
+ * this repository still green -- turning a description whose schemas are
+ * written in a dialect this tool does not model from `incomplete` into `pass`.
+ * Both directions of that branch are stated here as outcomes.
+ */
+test('jsonSchemaDialect: a 3.1 document naming a dialect this tool does not model is not a pass', async () => {
+  const outcome = await run('dialect-3-1', {
+    ...description(site({ schema: { type: 'string' }, example: 'x' })),
+    jsonSchemaDialect: 'https://json-schema.org/draft-07/schema',
+  })
+  assert.equal(outcome.code, 2)
+  assert.equal(outcome.report.status, 'incomplete')
+  assert.deepEqual(outcome.rules, ['schema-dialect-unsupported'])
+  assert.equal(outcome.report.findings[0].location.pointer, '/jsonSchemaDialect')
+  assert.equal(outcome.report.findings[0].evidence, 'https://json-schema.org/draft-07/schema')
+  assert.equal(outcome.report.summary.errors, 1)
+  assert.equal(outcome.report.summary.unknown, 1)
+  assert.equal(outcome.report.summary.checked, 1, 'the example itself was still checked; the dialect is the open question')
+})
+
+test('jsonSchemaDialect: a 3.0 document may not declare one at all, and declaring it is a gap', async () => {
+  const outcome = await run('dialect-3-0', {
+    ...description(site({ schema: { type: 'string' }, example: 'x' })),
+    openapi: '3.0.3',
+    jsonSchemaDialect: 'https://json-schema.org/draft/2020-12/schema',
+  })
+  assert.equal(outcome.code, 2)
+  assert.equal(outcome.report.status, 'incomplete')
+  assert.deepEqual(outcome.rules, ['schema-dialect-unsupported'])
+  assert.equal(outcome.report.findings[0].location.pointer, '/jsonSchemaDialect')
+  assert.equal(outcome.report.summary.unknown, 1)
+})
+
+test('jsonSchemaDialect: the dialect this tool does model leaves the run a verdict', async () => {
+  const outcome = await run('dialect-supported', {
+    ...description(site({ schema: { type: 'string' }, example: 'x' })),
+    jsonSchemaDialect: 'https://json-schema.org/draft/2020-12/schema',
+  })
+  assert.equal(outcome.code, 0)
+  assert.equal(outcome.report.status, 'pass')
+  assert.deepEqual(outcome.rules, [])
+})
+
 test('the warning rules really are the only three that could pass without the incomplete flag', () => {
   const warnings = INCOMPLETE_RULES.filter((ruleId) => RULE_SEVERITY[ruleId] !== 'error')
   assert.deepEqual(warnings.sort(), ['example-external-value', 'no-examples-declared', 'schema-missing'])
