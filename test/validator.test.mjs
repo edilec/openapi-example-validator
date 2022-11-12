@@ -101,6 +101,40 @@ test('parameters and response headers are examined, and a shared parameter only 
   assert.equal(report.summary.operations, 2)
 })
 
+/**
+ * The schema-missing branch that only a parameter or a header reaches.
+ *
+ * The media-type level has the same branch and is covered behaviourally, so
+ * this one could be suppressed with the whole suite green: the verdict survived
+ * -- the run stayed incomplete -- but the report changed to a `schema-malformed`
+ * error against `/schema`, a rule id, a severity, a pointer and two counts that
+ * were all wrong, and nothing noticed. What is stated here is the report, not
+ * just the status.
+ */
+test('a parameter or a header that declares examples but no schema is a warning at its own position', () => {
+  const { report } = analyze(description({
+    '/orders': {
+      get: {
+        parameters: [{ name: 'limit', in: 'query', example: 'x' }],
+        responses: { 200: { description: 'ok', headers: { 'X-Total': { examples: { one: { value: 1 }, two: { value: 2 } } } } } },
+      },
+    },
+  }))
+  assert.equal(report.status, 'incomplete')
+  assert.deepEqual(rulesOf(report), ['no-examples-declared', 'schema-missing', 'schema-missing'])
+  assert.deepEqual(report.findings.map((finding) => [finding.severity, finding.location.pointer]), [
+    ['warning', '/paths'],
+    ['warning', '/paths/~1orders/get/parameters/0'],
+    ['warning', '/paths/~1orders/get/responses/200/headers/X-Total'],
+  ])
+  assert.equal(report.findings[1].message.includes('This parameter declares 1 example(s) but no schema'), true, report.findings[1].message)
+  assert.equal(report.findings[2].message.includes('This header declares 2 example(s) but no schema'), true, report.findings[2].message)
+  assert.equal(report.summary.errors, 0)
+  assert.equal(report.summary.warnings, 3)
+  assert.equal(report.summary.examples, 0, 'an example with nothing to check it against is not an example this run examined')
+  assert.equal(report.summary.checked, 0)
+})
+
 test('an example reached through a reference is pointed at where the value really lives', () => {
   const { report } = analyze(description(response({
     'application/json': {
