@@ -60,21 +60,19 @@ const site = (media) => ({ '/orders': { get: { responses: { 200: { description: 
 
 test('no-examples-declared: a run that checked nothing is not allowed to pass', async () => {
   const outcome = await run('no-examples', description({ '/orders': { get: { responses: { 200: { description: 'ok' } } } } }))
-  assert.equal(outcome.code, 2)
+  assert.equal(outcome.code, 2, 'a warning alone would have exited 0; the incompleteness is what does not')
   assert.equal(outcome.report.status, 'incomplete')
   assert.equal(outcome.report.summary.errors, 0)
   assert.equal(outcome.report.summary.warnings, 1)
   assert.equal(outcome.report.summary.checked, 0)
-  assert.notEqual(outcome.code, 0, 'a warning alone would have exited 0; the incompleteness is what does not')
 })
 
 test('schema-missing: an example with nothing to check it against is not a pass', async () => {
   const outcome = await run('schema-missing', description(site({ example: 'anything at all' })))
-  assert.equal(outcome.code, 2)
+  assert.equal(outcome.code, 2, 'a warning alone would have exited 0; the incompleteness is what does not')
   assert.equal(outcome.report.status, 'incomplete')
   assert.equal(outcome.report.summary.errors, 0)
   assert.equal(outcome.report.summary.warnings, 2)
-  assert.notEqual(outcome.code, 0)
 })
 
 test('example-external-value: a value that was never fetched is not a value that was checked', async () => {
@@ -82,24 +80,22 @@ test('example-external-value: a value that was never fetched is not a value that
     schema: { type: 'string' },
     examples: { local: { value: 'here' }, remote: { externalValue: 'https://example.invalid/e.json' } },
   })))
-  assert.equal(outcome.code, 2)
+  assert.equal(outcome.code, 2, 'a warning alone would have exited 0; the incompleteness is what does not')
   assert.equal(outcome.report.status, 'incomplete')
   assert.equal(outcome.report.summary.errors, 0)
   assert.equal(outcome.report.summary.warnings, 1)
   assert.equal(outcome.report.summary.checked, 1, 'the inline example really was checked')
-  assert.notEqual(outcome.code, 0)
 })
 
 test('document-malformed: a document that is not an OpenAPI object is a gap on its own', async () => {
   // An array, so the run stops before it can also trip no-examples-declared and
   // this membership becomes the only thing holding the exit code at 2.
   const outcome = await run('not-an-object', [])
-  assert.equal(outcome.code, 2)
+  assert.equal(outcome.code, 2, 'an error alone would have exited 1; the incompleteness is what does not')
   assert.equal(outcome.report.status, 'incomplete')
   assert.deepEqual(outcome.rules, ['document-malformed'])
   assert.equal(outcome.report.summary.errors, 1)
   assert.equal(outcome.report.summary.warnings, 0)
-  assert.notEqual(outcome.code, 1, 'an error alone would have exited 1; the incompleteness is what does not')
 })
 
 test('node-budget-exceeded: a walk that stopped after one good example is still not a verdict', async () => {
@@ -107,13 +103,12 @@ test('node-budget-exceeded: a walk that stopped after one good example is still 
     '/checked': { get: { responses: { 200: { description: 'ok', content: { 'application/json': { schema: { type: 'string' }, example: 'ok' } } } } } },
     '/unwalked': { get: { responses: { 200: { description: 'ok', content: { 'application/json': { schema: { type: 'string' }, example: 'also ok' } } } } } },
   }), ['--max-nodes', '8'])
-  assert.equal(outcome.code, 2)
+  assert.equal(outcome.code, 2, 'an error alone would have exited 1; the incompleteness is what does not')
   assert.equal(outcome.report.status, 'incomplete')
   assert.deepEqual(outcome.rules, ['node-budget-exceeded'])
   assert.equal(outcome.report.summary.checked, 1, 'one example really was checked, so no-examples-declared cannot carry this')
   assert.equal(outcome.report.summary.errors, 1)
   assert.equal(outcome.report.summary.warnings, 0)
-  assert.notEqual(outcome.code, 1, 'an error alone would have exited 1; the incompleteness is what does not')
 })
 
 /**

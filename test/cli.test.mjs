@@ -65,10 +65,10 @@ test('a contradicted description exits 1 and names every position', async () => 
     report.findings[0].location.pointer,
     '/paths/~1pets/get/responses/200/content/application~1json/examples/two-pets/value/items/0/birthday',
   )
-  for (const finding of report.findings) {
-    assert.equal(finding.location.file, 'examples/broken-petstore.json')
-    assert.equal(finding.location.file.startsWith('/'), false, 'a report must not carry an absolute host path')
-  }
+  // The equality is the whole claim: a relative label, so no absolute host path
+  // reaches a report people paste into issues. The two cases below drive the
+  // same guarantee from an absolute input, where it can go red on its own.
+  for (const finding of report.findings) assert.equal(finding.location.file, 'examples/broken-petstore.json')
 })
 
 test('a description full of unanswerable questions exits 2 with an incomplete report', async () => {
@@ -96,6 +96,8 @@ test('an unreadable input exits 2 but still writes the report that says which in
   const report = JSON.parse(result.stdout)
   assert.equal(report.status, 'incomplete')
   assert.equal(report.findings[0].ruleId, 'document-unreadable')
+  // The path given was absolute and outside the working directory, so this
+  // equality is also what keeps an absolute host path out of the report.
   assert.equal(report.findings[0].location.file, 'absent.json')
 })
 
