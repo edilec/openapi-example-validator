@@ -353,3 +353,10 @@ applies to identifiers, not only to excerpts: a path template, a media type, an
 example name, a property name, a `$ref` string and an unknown keyword are all
 strings the document's author chose, and every one of them becomes a pointer
 segment or part of a message.
+
+Because that is lossy, two identifiers that differ only in stripped characters
+render identically. They are still two findings: repeats are recognised by the
+position the description really named, before anything was stripped, so a real
+offending position is never deleted by the one that renders like it, and the
+error and unanswered counts are the counts of positions rather than of distinct
+report lines.

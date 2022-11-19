@@ -3,12 +3,16 @@
  * bounded measurements taken of every example value.
  *
  * A finding is only as useful as the position it names, so pointers are built
- * from the same segments the document used and escaped exactly once. Segments
- * are sanitised by the caller before they arrive here: escaping a newline as
- * `~1` would be wrong, and leaving it unescaped would forge a report line.
+ * from the same segments the document used and escaped exactly once. The
+ * segments arrive exactly as the document wrote them, and `reportPointer`
+ * sanitises each one on its way out: escaping a newline as `~1` would be wrong,
+ * and leaving it unescaped would forge a report line. Sanitising here rather
+ * than at the call site is what lets a finding be identified by the position
+ * the document really named, while a reader is shown one that cannot forge
+ * anything.
  */
 
-import { POINTER_LIMIT, sanitize } from './text.mjs'
+import { LABEL_LIMIT, POINTER_LIMIT, sanitize } from './text.mjs'
 
 /** `~` becomes `~0` and `/` becomes `~1`, in that order, per RFC 6901. */
 export function escapeSegment(segment) {
@@ -20,15 +24,23 @@ export function unescapeSegment(segment) {
   return segment.split('~1').join('/').split('~0').join('~')
 }
 
-/** Join already-sanitised segments into a pointer. An empty list is the root. */
+/** Join segments into a pointer. An empty list is the root. */
 export function pointerOf(parts) {
   if (parts.length === 0) return ''
   return `/${parts.map((part) => escapeSegment(part)).join('/')}`
 }
 
-/** A pointer for a report, bounded and stripped of anything that forges a line. */
+/**
+ * A pointer for a report: every segment stripped of anything that forges a
+ * line and bounded on its own, then the whole pointer bounded again.
+ *
+ * Per segment rather than over the joined string, because a control character
+ * at the end of a segment must disappear rather than become a space in the
+ * middle of the pointer -- and because the bound belongs to the identifier the
+ * document chose, not to the pointer it happens to sit in.
+ */
 export function reportPointer(parts) {
-  return sanitize(pointerOf(parts), POINTER_LIMIT)
+  return sanitize(pointerOf(parts.map((part) => sanitize(part, LABEL_LIMIT))), POINTER_LIMIT)
 }
 
 /**

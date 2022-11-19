@@ -171,6 +171,48 @@ test('a media type key and a $ref string are cleaned on their way into evidence'
   assert.equal(reference.evidence, 'https://example.invalid/a b.json')
 })
 
+/**
+ * Sanitising is lossy, and a finding is not lost with it.
+ *
+ * Two property names that differ only in a bidi control are two positions in
+ * the example and one string in the report. Deduplicating on what a reader sees
+ * would delete one of them and understate the error count, so the key is built
+ * from the position the document really named, before anything is stripped.
+ */
+test('two positions that differ only in a stripped character are both reported', async () => {
+  const path = join(workspace, 'lookalike.json')
+  await writeFile(path, JSON.stringify({
+    openapi: '3.1.0',
+    info: { title: 'Lookalikes', version: '1' },
+    paths: {
+      '/a': {
+        get: {
+          responses: {
+            200: {
+              description: 'ok',
+              content: {
+                'application/json': {
+                  schema: { type: 'object', additionalProperties: false },
+                  example: { dup: 1, [`dup${RLM}`]: 2 },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  }))
+  const result = await execFileAsync(process.execPath, [cli, '--spec', path, '--json'], { cwd: projectDirectory })
+    .then((value) => value, (error) => error)
+  const lookalike = JSON.parse(result.stdout)
+  const extras = lookalike.findings.filter((finding) => finding.ruleId === 'example-additional-property')
+  assert.equal(extras.length, 2, 'one of the two offending properties was dropped as a duplicate')
+  assert.equal(lookalike.summary.errors, 2)
+  assert.deepEqual(new Set(extras.map((finding) => finding.location.pointer)).size, 1, 'they are meant to be indistinguishable to a reader')
+  assert.equal(extras[0].location.pointer.endsWith('/example/dup'), true, extras[0].location.pointer)
+  for (const finding of extras) assert.equal(finding.message.includes(RLM), false)
+})
+
 test('a format name carrying an isolate is cleaned before it reaches the message', () => {
   const finding = report.findings.find((entry) => entry.ruleId === 'format-not-asserted')
   assert.equal(finding.message.includes('"emai l"'), true, finding.message)

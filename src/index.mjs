@@ -181,10 +181,17 @@ function createCollector() {
  *
  * The severity comes from the table and nowhere else, and an id the table does
  * not know throws rather than defaulting -- a rule that quietly became a
- * warning is exactly the drift the table exists to prevent. The deduplication
- * key is the whole finding: one schema referenced by four examples would
- * otherwise report the same unsupported keyword, at the same pointer, in the
- * same words, four times.
+ * warning is exactly the drift the table exists to prevent.
+ *
+ * The deduplication key is the whole finding: one schema referenced by four
+ * examples would otherwise report the same unsupported keyword, at the same
+ * pointer, in the same words, four times. It is built from the row as it
+ * arrived, **before** sanitising, and that is not incidental. Sanitising is
+ * lossy on purpose -- two property names that differ only in a bidi control
+ * render identically -- so keying on the rendered finding would let one real
+ * offending position delete another and understate the counts. Two findings
+ * that are genuinely at two positions are both reported, even when a reader
+ * cannot tell their pointers apart.
  */
 function record(collector, row) {
   const severity = RULE_SEVERITY[row.ruleId]
@@ -192,7 +199,7 @@ function record(collector, row) {
   const pointer = reportPointer(row.parts)
   const message = sanitize(row.message, MESSAGE_LIMIT)
   const evidence = row.evidence === undefined || row.evidence === null ? null : sanitize(row.evidence, EXCERPT_LIMIT)
-  const key = JSON.stringify([row.ruleId, pointer, message, evidence])
+  const key = JSON.stringify([row.ruleId, row.parts, row.message, row.evidence ?? null])
   if (INCOMPLETE.has(row.ruleId)) collector.incomplete = true
   if (collector.seen.has(key)) return
   collector.seen.add(key)
@@ -460,7 +467,7 @@ function walkPaths(context) {
 
   for (const template of Object.keys(paths)) {
     if (!spend(context, 1)) return
-    const parts = ['paths', label(template)]
+    const parts = ['paths', template]
     const resolved = follow(context, paths[template], parts, 'path item')
     if (resolved === null) continue
     const item = resolved.value
@@ -513,7 +520,7 @@ function walkOperation(context, operation, parts) {
   }
   for (const status of Object.keys(responses)) {
     if (!spend(context, 1)) return
-    const responseParts = [...parts, 'responses', label(status, 40)]
+    const responseParts = [...parts, 'responses', status]
     const resolved = follow(context, responses[status], responseParts, 'response')
     if (resolved === null) continue
     if (!isRecord(resolved.value)) {
@@ -549,7 +556,7 @@ function walkHeaders(context, headers, parts) {
   }
   for (const name of Object.keys(headers)) {
     if (!spend(context, 1)) return
-    const resolved = follow(context, headers[name], [...parts, label(name, 80)], 'header')
+    const resolved = follow(context, headers[name], [...parts, name], 'header')
     if (resolved === null) continue
     if (!isRecord(resolved.value)) {
       malformed(context, resolved.parts, 'This header is not an object.', typeof resolved.value)
@@ -589,7 +596,7 @@ function walkContent(context, content, parts) {
   }
   for (const mediaType of Object.keys(content)) {
     if (!spend(context, 1)) return
-    const mediaParts = [...parts, label(mediaType, 80)]
+    const mediaParts = [...parts, mediaType]
     const media = content[mediaType]
     if (!isRecord(media)) {
       malformed(context, mediaParts, 'This media type object is not an object.', Array.isArray(media) ? 'array' : typeof media)
@@ -662,7 +669,7 @@ function collectSites(context, node, parts) {
     return sites
   }
   for (const name of Object.keys(declared)) {
-    const exampleParts = [...parts, 'examples', label(name, 80)]
+    const exampleParts = [...parts, 'examples', name]
     if (!spend(context, 1)) return sites
     const resolved = follow(context, declared[name], exampleParts, 'example')
     if (resolved === null) continue

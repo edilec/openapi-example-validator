@@ -174,8 +174,11 @@ This section is the honest part of the README. These are the things the tool
   service would ever produce it.
 - **Sanitising is lossy on purpose.** Control and bidi characters in an
   identifier are replaced before it reaches output, so two keys that differ only
-  in such characters can appear identical in a report. That is the trade against
-  a report line that lies about its own structure.
+  in such characters appear identical in a report. That is the trade against a
+  report line that lies about its own structure. They are still two findings:
+  duplicates are recognised by the position the description really named, not by
+  the text a reader is shown, so no offending position is dropped and the counts
+  are the real ones.
 
 ## Determinism
 
