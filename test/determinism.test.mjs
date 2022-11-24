@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { analyzeOpenApi } from '../src/index.mjs'
 
 const projectDirectory = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const SOURCE_FILES = ['src/text.mjs', 'src/pointer.mjs', 'src/document.mjs', 'src/refs.mjs', 'src/schema.mjs', 'src/index.mjs', 'bin/openapi-example-validator.mjs']
+const SOURCE_FILES = ['src/text.mjs', 'src/pointer.mjs', 'src/document.mjs', 'src/refs.mjs', 'src/pattern.mjs', 'src/schema.mjs', 'src/index.mjs', 'bin/openapi-example-validator.mjs']
 
 const analyze = (document, options = {}) => analyzeOpenApi({
   bytes: new TextEncoder().encode(JSON.stringify(document)),

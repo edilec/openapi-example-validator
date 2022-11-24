@@ -53,6 +53,10 @@ change and is recorded here.
   pattern length, pattern steps and milliseconds -- each enforced, each wired to
   a flag, each reported by name, and each refusing whole rather than
   truncating.
+- Repeated findings collapsed by the position the description really named
+  rather than by the sanitised text, so two identifiers that differ only in
+  characters sanitising strips stay two findings and the counts stay the counts
+  of offending positions.
 - Stable output: no clock reading, no randomness, no absolute host path, no
   locale-dependent ordering, and byte-identical stdout for the same bytes.
 

@@ -547,7 +547,7 @@ function stringChecks(value, node, parts, path, state, push, bad) {
        * -- which is why the estimate is made first and the match is refused
        * rather than attempted and abandoned.
        */
-      const work = estimatePatternWork(compiled.analysis, value.length)
+      const work = estimatePatternWork(compiled.analysis, characters)
       if (work > state.limits.maxPatternSteps) {
         refuse(
           `Matching this pattern against a ${characters}-character example is estimated at ${renderWork(work)} step(s), `
