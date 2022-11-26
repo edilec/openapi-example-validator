@@ -219,7 +219,7 @@ membership is removed.
 | Rule | Severity | Incomplete | What it means |
 | --- | --- | --- | --- |
 | `document-malformed` | error | yes | The bytes parsed, but the result is not an OpenAPI object, or `paths` is not an object. |
-| `document-not-json` | error | yes | The bytes decoded but are not JSON. This tool reads JSON only; YAML is a non-goal. |
+| `document-not-json` | error | yes | The bytes decoded but are not JSON. This tool reads JSON only; YAML is a non-goal. The evidence carries the parser's position, line and column, never the snippet of the file the parser quotes back: V8 reports `Unexpected token 'A', "..." is not valid JSON`, which reproduces a short description in full. |
 | `document-not-utf8` | error | yes | The bytes are not valid UTF-8, so no part of the description was read. |
 | `document-too-deep` | error | yes | The description nests deeper than `maxDepth`, so it was not walked. |
 | `document-too-large` | error | yes | The file is larger than `maxBytes`, so it was not parsed. |
@@ -353,6 +353,14 @@ applies to identifiers, not only to excerpts: a path template, a media type, an
 example name, a property name, a `$ref` string and an unknown keyword are all
 strings the document's author chose, and every one of them becomes a pointer
 segment or part of a message.
+
+Sanitising is not what defends the parse-failure path, because it cannot be.
+V8 phrases one of its two JSON parse failures as `Unexpected token 'A', "..."
+is not valid JSON`, quoting the input at the FRONT of the message, where a
+strip of control characters does not reach it and a length bound that cuts
+from the END never gets to it. The quotation is removed outright instead, and
+the parser's position, line and column -- which carry no content -- are what
+the evidence field keeps.
 
 Because that is lossy, two identifiers that differ only in stripped characters
 render identically. They are still two findings: repeats are recognised by the

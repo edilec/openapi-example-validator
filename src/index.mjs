@@ -878,5 +878,5 @@ export { DEFAULT_LIMITS, detectVersion, isRecord, readDocument, validateLimits }
 export { classifyRef, createResolver, rotateCycle } from './refs.mjs'
 export { ASSERTED_FORMATS, SUPPORTED_DIALECTS, deepEqual, isMultipleOf, keywordsFor, validateExample } from './schema.mjs'
 export { analyzePattern, estimatePatternWork } from './pattern.mjs'
-export { byCodeUnit, decodeUtf8, sanitize } from './text.mjs'
+export { byCodeUnit, decodeUtf8, parseFailureDetail, sanitize } from './text.mjs'
 export { escapeSegment, measureDepth, parseFragment, pointerOf, resolvePointerParts } from './pointer.mjs'

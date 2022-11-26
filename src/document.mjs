@@ -8,7 +8,7 @@
  */
 
 import { measureDepth } from './pointer.mjs'
-import { decodeUtf8, sanitize } from './text.mjs'
+import { decodeUtf8, parseFailureDetail, sanitize } from './text.mjs'
 
 export function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -107,7 +107,7 @@ export function readDocument(bytes, limits) {
       ok: false,
       ruleId: 'document-not-json',
       message: 'The document is not JSON, so no example in it could be checked.',
-      evidence: error.message,
+      evidence: parseFailureDetail(error),
       suggestion: 'This tool reads JSON only; convert a YAML description to JSON first.',
     }
   }

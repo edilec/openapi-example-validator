@@ -218,3 +218,81 @@ test('a format name carrying an isolate is cleaned before it reaches the message
   assert.equal(finding.message.includes('"emai l"'), true, finding.message)
   assert.equal(finding.evidence, 'emai l')
 })
+
+/**
+ * The parse-failure path, which every case above walks past.
+ *
+ * Everything above rides inside a document the tool parsed and then chose to
+ * describe. A description that does not parse never reaches that code: it is
+ * described by V8's own error message instead, and V8 phrases one of its two
+ * parse failures as `Unexpected token 'A', "AKIAIOSFODNN7EXAMPLE" is not valid
+ * JSON` -- reproducing a short file in full, into the `document-not-json`
+ * evidence field, on stdout.
+ *
+ * `sanitize` cannot repair it: it strips control characters and cuts from the
+ * end, and the quoted snippet is at the front.
+ *
+ * An OpenAPI description carries example payloads, so it carries exactly the
+ * kind of thing that must not be echoed. The canaries are published
+ * placeholders, never real credentials: the example key id from the AWS
+ * documentation, the standard test card number that authorises nothing (with a
+ * leading letter, because the bare digits are a valid JSON number), and a host
+ * under the RFC 2606 `.invalid` reserved top-level domain. Every prefix from
+ * eight characters up is scanned on both streams -- a check of the whole value
+ * alone passes for output that leaks all but the last character.
+ */
+const CANARIES = Object.freeze({
+  'AWS example access key id': 'AKIAIOSFODNN7EXAMPLE',
+  'standard test card number': 'x4111111111111111',
+  'reserved example host': 'api.example.invalid',
+  'bearer-looking token': 'Bearer-ZXhhbXBsZS10b2tlbg',
+})
+
+const MIN_PREFIX = 8
+
+test('a description that will not parse is not quoted back by its own parse error', async () => {
+  const path = join(workspace, 'unparseable.json')
+  for (const [name, canary] of Object.entries(CANARIES)) {
+    await writeFile(path, canary)
+    const run = (args) => execFileAsync(process.execPath, [cli, ...args], { cwd: projectDirectory })
+      .then((value) => value, (error) => error)
+    const machineRun = await run(['--spec', path, '--json'])
+    const humanRun = await run(['--spec', path])
+
+    const parsed = JSON.parse(machineRun.stdout)
+    assert.equal(
+      parsed.findings.some((finding) => finding.ruleId === 'document-not-json'),
+      true,
+      'the document must really have failed to parse',
+    )
+
+    for (let length = MIN_PREFIX; length <= canary.length; length += 1) {
+      const prefix = canary.slice(0, length)
+      for (const [stream, text] of [
+        ['stdout', machineRun.stdout],
+        ['stderr', machineRun.stderr],
+        ['human stdout', humanRun.stdout],
+        ['human stderr', humanRun.stderr],
+      ]) {
+        assert.equal(text.includes(prefix), false, `${name}: "${prefix}" reached ${stream}`)
+      }
+    }
+  }
+})
+
+/**
+ * The other half of the fix: a diagnostic that says nothing is a different
+ * defect. A description missing one comma reports a position, a line and a
+ * column rather than a quotation, and that is what a reader needs.
+ */
+test('a parse failure still says where the description went wrong', async () => {
+  const path = join(workspace, 'missing-comma.json')
+  await writeFile(path, '{\n  "openapi": "3.1.0"\n  "paths": {}\n}\n')
+  const result = await execFileAsync(process.execPath, [cli, '--spec', path, '--json'], { cwd: projectDirectory })
+    .then((value) => value, (error) => error)
+
+  const finding = JSON.parse(result.stdout).findings.find((entry) => entry.ruleId === 'document-not-json')
+  assert.notEqual(finding, undefined)
+  assert.match(finding.evidence, /position \d+/)
+  assert.match(finding.evidence, /line \d+ column \d+/)
+})
