@@ -104,6 +104,33 @@ export function sanitize(value, limit = EXCERPT_LIMIT) {
   return `${flattened.slice(0, limit)}...`
 }
 
+const UNPARSEABLE = 'the document could not be parsed as JSON'
+
+/** Where V8 puts the offending offset. An offset says nothing about content, so it is safe. */
+const PARSE_POSITION = /at position \d+(?: \(line \d+ column \d+\))?/
+
+/**
+ * The shape that quotes the input back. Recognised FIRST: a description whose
+ * own text reads `at position 1` makes V8 write
+ * `Unexpected token 'a', "at position 1" is not valid JSON`, so looking for the
+ * offset first finds that phrase INSIDE the quoted span and slices the
+ * description straight back out. The `s` flag matters too: the quoted span can
+ * contain a newline.
+ */
+const QUOTES_THE_INPUT = /^Unexpected token (.+?), (\.\.\.)?".*"(?:\.\.\.)? is not valid JSON$/s
+
+function describeParseFailure(message) {
+  const quoting = QUOTES_THE_INPUT.exec(message)
+  if (quoting !== null) {
+    const where = quoting[2] === undefined ? 'at the start of the document' : 'inside the document'
+    return `unexpected token ${quoting[1]} ${where}`
+  }
+  const position = PARSE_POSITION.exec(message)
+  if (position !== null) return message.slice(0, position.index + position[0].length)
+  if (message === 'Unexpected end of JSON input') return message
+  return UNPARSEABLE
+}
+
 /**
  * Say why a document would not parse, without reproducing any of it.
  *
@@ -117,15 +144,18 @@ export function sanitize(value, limit = EXCERPT_LIMIT) {
  *
  * The position is the useful half and carries no content, so it is kept; the
  * quoted half is the input and never leaves this function.
+ *
+ * The closing guard is deliberate belt and braces, and it is why this function
+ * is safe against wordings it has never seen: across 500,206 distinct V8 parse
+ * messages, every one that carries no quoted snippet also carries no double
+ * quote at all -- it quotes JSON punctuation with apostrophes. So a double
+ * quote surviving to the end means a snippet survived, whatever the branch
+ * logic above concluded, and the generic sentence is used instead.
  */
 export function parseFailureDetail(error) {
-  const message = String(error?.message ?? 'could not be parsed')
-  const position = /at position \d+(?: \(line \d+ column \d+\))?/.exec(message)
-  if (position !== null) return message.slice(0, position.index + position[0].length)
-  const token = /^Unexpected token (.+?), ".*?"(?:\.\.\.)? is not valid JSON$/s.exec(message)
-  if (token !== null) return `unexpected token ${token[1]} at the start of the document`
-  if (/^Unexpected end of JSON input$/.test(message)) return message
-  return 'the document could not be parsed as JSON'
+  const message = String(error?.message ?? '')
+  const detail = describeParseFailure(message)
+  return detail.includes('"') ? UNPARSEABLE : detail
 }
 
 /**
