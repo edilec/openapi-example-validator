@@ -1,0 +1,133 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Pet store (broken examples)",
+    "version": "1.4.0",
+    "description": "The same description with examples that contradict their schemas."
+  },
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "paths": {
+    "/pets": {
+      "parameters": [
+        {
+          "name": "limit",
+          "in": "query",
+          "schema": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "example": 0
+        }
+      ],
+      "get": {
+        "summary": "List pets",
+        "responses": {
+          "200": {
+            "description": "A page of pets",
+            "headers": {
+              "X-Request-Id": {
+                "schema": { "type": "string", "format": "uuid" },
+                "example": "request-4"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PetList" },
+                "examples": {
+                  "two-pets": {
+                    "summary": "A full page",
+                    "value": {
+                      "items": [
+                        {
+                          "id": 1,
+                          "name": "Ada",
+                          "nickname": "Addie",
+                          "birthday": "2021-02-30",
+                          "tags": ["calm", "calm"]
+                        },
+                        {
+                          "id": "2",
+                          "name": "Grace",
+                          "status": "asleep"
+                        }
+                      ],
+                      "next": null
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Add a pet",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/NewPet" },
+              "example": { "name": "A pet whose name is far longer than the schema allows", "tags": ["small"] },
+              "examples": {
+                "named": { "value": { "name": "Hopper", "status": "available" } }
+              }
+            },
+            "text/plain": {
+              "schema": { "type": "string", "minLength": 1, "maxLength": 40 },
+              "example": { "name": "Hopper" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The pet that was added",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Pet" },
+                "example": {
+                  "id": 3,
+                  "name": "Hopper",
+                  "status": "available",
+                  "birthday": "2024-11-05",
+                  "tags": ["small"]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Pet": {
+        "type": "object",
+        "required": ["id", "name", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "integer", "minimum": 1 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+          "status": { "type": "string", "enum": ["available", "pending", "sold"] },
+          "birthday": { "type": "string", "format": "date" },
+          "tags": { "type": "array", "uniqueItems": true, "maxItems": 8, "items": { "type": "string", "minLength": 1 } }
+        }
+      },
+      "NewPet": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+          "status": { "type": "string", "enum": ["available", "pending", "sold"] },
+          "tags": { "type": "array", "uniqueItems": true, "maxItems": 8, "items": { "type": "string", "minLength": 1 } }
+        }
+      },
+      "PetList": {
+        "type": "object",
+        "required": ["items"],
+        "additionalProperties": false,
+        "properties": {
+          "items": { "type": "array", "maxItems": 50, "items": { "$ref": "#/components/schemas/Pet" } },
+          "next": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

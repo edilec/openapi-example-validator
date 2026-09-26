@@ -1,0 +1,186 @@
+import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
+import test, { after } from 'node:test'
+import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
+
+import { INCOMPLETE_RULES, RULE_SEVERITY } from '../src/index.mjs'
+
+const execFileAsync = promisify(execFile)
+const projectDirectory = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const cli = join(projectDirectory, 'bin', 'openapi-example-validator.mjs')
+
+/**
+ * The membership of INCOMPLETE_RULES, pinned where it actually matters.
+ *
+ * One `incomplete = true` site decides whether a run that could not answer its
+ * question reports a verdict anyway. For an `error` rule, removing an id from
+ * that list turns exit 2 into exit 1, and every case in
+ * `test/severity-behaviour.test.mjs` states its exit code as a literal -- so
+ * most of them are pinned there already.
+ *
+ * Two groups are not, and they are the reason this file exists.
+ *
+ * The three `warning` rules come first. Their severity alone would not stop a
+ * pass -- a warning is not an error -- so for them the membership is the *only*
+ * thing between a run that checked nothing and a green build.
+ *
+ * The second group was found by removing each of the thirty-two memberships in
+ * turn and watching what went red. `document-malformed` and
+ * `node-budget-exceeded` survived behaviourally, because the fixtures that
+ * reach them in the severity guard also trip `no-examples-declared`, which kept
+ * those runs incomplete whatever the flag said. Only a declaration comparison
+ * noticed -- and a declaration comparison is what a coordinated edit satisfies.
+ * So each of those two gets a case here where it is the *only* gap in the run.
+ */
+
+let workspace = null
+async function directory() {
+  if (workspace === null) workspace = await mkdtemp(join(tmpdir(), 'openapi-example-validator-incomplete-'))
+  return workspace
+}
+after(async () => {
+  if (workspace !== null) await rm(workspace, { recursive: true, force: true })
+})
+
+async function run(name, document, flags = []) {
+  const path = join(await directory(), `${name}.json`)
+  await writeFile(path, JSON.stringify(document))
+  const result = await execFileAsync(process.execPath, [cli, '--spec', path, '--json', ...flags], { cwd: projectDirectory })
+    .then((value) => ({ code: 0, ...value }), (error) => ({ code: error.code, stdout: error.stdout }))
+  const report = JSON.parse(result.stdout)
+  return { code: result.code, report, rules: report.findings.map((finding) => finding.ruleId) }
+}
+
+const description = (paths, extra = {}) => ({ openapi: '3.1.0', info: { title: 'Gaps', version: '1' }, paths, ...extra })
+const site = (media) => ({ '/orders': { get: { responses: { 200: { description: 'ok', content: { 'application/json': media } } } } } })
+
+test('no-examples-declared: a run that checked nothing is not allowed to pass', async () => {
+  const outcome = await run('no-examples', description({ '/orders': { get: { responses: { 200: { description: 'ok' } } } } }))
+  assert.equal(outcome.code, 2, 'a warning alone would have exited 0; the incompleteness is what does not')
+  assert.equal(outcome.report.status, 'incomplete')
+  assert.equal(outcome.report.summary.errors, 0)
+  assert.equal(outcome.report.summary.warnings, 1)
+  assert.equal(outcome.report.summary.checked, 0)
+})
+
+test('schema-missing: an example with nothing to check it against is not a pass', async () => {
+  const outcome = await run('schema-missing', description(site({ example: 'anything at all' })))
+  assert.equal(outcome.code, 2, 'a warning alone would have exited 0; the incompleteness is what does not')
+  assert.equal(outcome.report.status, 'incomplete')
+  assert.equal(outcome.report.summary.errors, 0)
+  assert.equal(outcome.report.summary.warnings, 2)
+})
+
+test('example-external-value: a value that was never fetched is not a value that was checked', async () => {
+  const outcome = await run('external', description(site({
+    schema: { type: 'string' },
+    examples: { local: { value: 'here' }, remote: { externalValue: 'https://example.invalid/e.json' } },
+  })))
+  assert.equal(outcome.code, 2, 'a warning alone would have exited 0; the incompleteness is what does not')
+  assert.equal(outcome.report.status, 'incomplete')
+  assert.equal(outcome.report.summary.errors, 0)
+  assert.equal(outcome.report.summary.warnings, 1)
+  assert.equal(outcome.report.summary.checked, 1, 'the inline example really was checked')
+})
+
+test('document-malformed: a document that is not an OpenAPI object is a gap on its own', async () => {
+  // An array, so the run stops before it can also trip no-examples-declared and
+  // this membership becomes the only thing holding the exit code at 2.
+  const outcome = await run('not-an-object', [])
+  assert.equal(outcome.code, 2, 'an error alone would have exited 1; the incompleteness is what does not')
+  assert.equal(outcome.report.status, 'incomplete')
+  assert.deepEqual(outcome.rules, ['document-malformed'])
+  assert.equal(outcome.report.summary.errors, 1)
+  assert.equal(outcome.report.summary.warnings, 0)
+})
+
+test('node-budget-exceeded: a walk that stopped after one good example is still not a verdict', async () => {
+  const outcome = await run('budget', description({
+    '/checked': { get: { responses: { 200: { description: 'ok', content: { 'application/json': { schema: { type: 'string' }, example: 'ok' } } } } } },
+    '/unwalked': { get: { responses: { 200: { description: 'ok', content: { 'application/json': { schema: { type: 'string' }, example: 'also ok' } } } } } },
+  }), ['--max-nodes', '8'])
+  assert.equal(outcome.code, 2, 'an error alone would have exited 1; the incompleteness is what does not')
+  assert.equal(outcome.report.status, 'incomplete')
+  assert.deepEqual(outcome.rules, ['node-budget-exceeded'])
+  assert.equal(outcome.report.summary.checked, 1, 'one example really was checked, so no-examples-declared cannot carry this')
+  assert.equal(outcome.report.summary.errors, 1)
+  assert.equal(outcome.report.summary.warnings, 0)
+})
+
+/**
+ * The document-level dialect, which nothing else in the suite reaches.
+ *
+ * `schema-dialect-unsupported` has a behavioural case already, but it gets
+ * there through a Schema Object's own `$schema`. The document-level
+ * `jsonSchemaDialect` branch is a second way to the same rule id, and the whole
+ * of `checkDocumentDialect` could be replaced by `return` with every test in
+ * this repository still green -- turning a description whose schemas are
+ * written in a dialect this tool does not model from `incomplete` into `pass`.
+ * Both directions of that branch are stated here as outcomes.
+ */
+test('jsonSchemaDialect: a 3.1 document naming a dialect this tool does not model is not a pass', async () => {
+  const outcome = await run('dialect-3-1', {
+    ...description(site({ schema: { type: 'string' }, example: 'x' })),
+    jsonSchemaDialect: 'https://json-schema.org/draft-07/schema',
+  })
+  assert.equal(outcome.code, 2)
+  assert.equal(outcome.report.status, 'incomplete')
+  assert.deepEqual(outcome.rules, ['schema-dialect-unsupported'])
+  assert.equal(outcome.report.findings[0].location.pointer, '/jsonSchemaDialect')
+  assert.equal(outcome.report.findings[0].evidence, 'https://json-schema.org/draft-07/schema')
+  assert.equal(outcome.report.summary.errors, 1)
+  assert.equal(outcome.report.summary.unknown, 1)
+  assert.equal(outcome.report.summary.checked, 1, 'the example itself was still checked; the dialect is the open question')
+})
+
+test('jsonSchemaDialect: a 3.0 document may not declare one at all, and declaring it is a gap', async () => {
+  const outcome = await run('dialect-3-0', {
+    ...description(site({ schema: { type: 'string' }, example: 'x' })),
+    openapi: '3.0.3',
+    jsonSchemaDialect: 'https://json-schema.org/draft/2020-12/schema',
+  })
+  assert.equal(outcome.code, 2)
+  assert.equal(outcome.report.status, 'incomplete')
+  assert.deepEqual(outcome.rules, ['schema-dialect-unsupported'])
+  assert.equal(outcome.report.findings[0].location.pointer, '/jsonSchemaDialect')
+  assert.equal(outcome.report.summary.unknown, 1)
+})
+
+test('jsonSchemaDialect: the dialect this tool does model leaves the run a verdict', async () => {
+  const outcome = await run('dialect-supported', {
+    ...description(site({ schema: { type: 'string' }, example: 'x' })),
+    jsonSchemaDialect: 'https://json-schema.org/draft/2020-12/schema',
+  })
+  assert.equal(outcome.code, 0)
+  assert.equal(outcome.report.status, 'pass')
+  assert.deepEqual(outcome.rules, [])
+})
+
+test('the warning rules really are the only three that could pass without the incomplete flag', () => {
+  const warnings = INCOMPLETE_RULES.filter((ruleId) => RULE_SEVERITY[ruleId] !== 'error')
+  assert.deepEqual(warnings.sort(), ['example-external-value', 'no-examples-declared', 'schema-missing'])
+})
+
+test('every rule that makes a run incomplete is driven to an incomplete status somewhere', async () => {
+  const text = await (await import('node:fs/promises')).readFile(resolve(projectDirectory, 'test/severity-behaviour.test.mjs'), 'utf8')
+  const blocks = text.split('\ntest(').slice(1)
+  const incompleteCases = new Set()
+  for (const block of blocks) {
+    const name = /'([a-z0-9-]+) is /.exec(block)
+    if (name !== null && block.includes("assert.equal(outcome.report.status, 'incomplete')")) incompleteCases.add(name[1])
+  }
+  for (const ruleId of INCOMPLETE_RULES) {
+    assert.ok(incompleteCases.has(ruleId), `${ruleId} is in INCOMPLETE_RULES but no case asserts an incomplete status for it`)
+  }
+})
+
+test('a run with findings but no gap is a verdict, so the distinction is not vacuous', async () => {
+  const outcome = await run('verdict', description(site({ schema: { type: 'integer' }, example: 'four' })))
+  assert.equal(outcome.code, 1)
+  assert.equal(outcome.report.status, 'fail')
+  assert.equal(outcome.report.summary.unknown, 0)
+})

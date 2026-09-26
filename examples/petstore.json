@@ -1,0 +1,135 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Pet store",
+    "version": "1.4.0",
+    "description": "A small description whose examples all agree with their schemas."
+  },
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "paths": {
+    "/pets": {
+      "parameters": [
+        {
+          "name": "limit",
+          "in": "query",
+          "schema": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "example": 25
+        }
+      ],
+      "get": {
+        "summary": "List pets",
+        "responses": {
+          "200": {
+            "description": "A page of pets",
+            "headers": {
+              "X-Request-Id": {
+                "schema": { "type": "string", "format": "uuid" },
+                "example": "1f3c9b7a-0d42-4e51-9c8b-2a6f5d1e7b04"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PetList" },
+                "examples": {
+                  "two-pets": {
+                    "summary": "A full page",
+                    "value": {
+                      "items": [
+                        {
+                          "id": 1,
+                          "name": "Ada",
+                          "status": "available",
+                          "birthday": "2021-02-28",
+                          "tags": ["calm", "indoor"]
+                        },
+                        {
+                          "id": 2,
+                          "name": "Grace",
+                          "status": "pending",
+                          "tags": ["loud"]
+                        }
+                      ],
+                      "next": null
+                    }
+                  },
+                  "empty-page": {
+                    "summary": "Nothing to show",
+                    "value": { "items": [], "next": null }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Add a pet",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/NewPet" },
+              "example": { "name": "Hopper", "status": "available", "tags": ["small"] }
+            },
+            "text/plain": {
+              "schema": { "type": "string", "minLength": 1, "maxLength": 40 },
+              "example": "name=Hopper;status=available"
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The pet that was added",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Pet" },
+                "example": {
+                  "id": 3,
+                  "name": "Hopper",
+                  "status": "available",
+                  "birthday": "2024-11-05",
+                  "tags": ["small"]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Pet": {
+        "type": "object",
+        "required": ["id", "name", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "integer", "minimum": 1 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+          "status": { "type": "string", "enum": ["available", "pending", "sold"] },
+          "birthday": { "type": "string", "format": "date" },
+          "tags": { "type": "array", "uniqueItems": true, "maxItems": 8, "items": { "type": "string", "minLength": 1 } }
+        }
+      },
+      "NewPet": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+          "status": { "type": "string", "enum": ["available", "pending", "sold"] },
+          "tags": { "type": "array", "uniqueItems": true, "maxItems": 8, "items": { "type": "string", "minLength": 1 } }
+        }
+      },
+      "PetList": {
+        "type": "object",
+        "required": ["items"],
+        "additionalProperties": false,
+        "properties": {
+          "items": { "type": "array", "maxItems": 50, "items": { "$ref": "#/components/schemas/Pet" } },
+          "next": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}
