@@ -9,6 +9,8 @@ change and is recorded here.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-28
+
 ### Added
 
 - `analyzeOpenApi` and `validateOpenApiFile` check every request and response
@@ -59,5 +61,3 @@ change and is recorded here.
   of offending positions.
 - Stable output: no clock reading, no randomness, no absolute host path, no
   locale-dependent ordering, and byte-identical stdout for the same bytes.
-
-No release has been published.
