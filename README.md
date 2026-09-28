@@ -31,10 +31,12 @@ fail: it says the evidence for one was not obtained.
 ## Install
 
 ```sh
-npm install openapi-example-validator
+npm install github:edilec/openapi-example-validator
 ```
 
-Or run it without installing:
+This installs the public GitHub source; `openapi-example-validator` is not published to npm.
+
+After installation, run:
 
 ```sh
 npx openapi-example-validator --spec openapi.json
@@ -43,7 +45,7 @@ npx openapi-example-validator --spec openapi.json
 ## Use
 
 ```sh
-openapi-example-validator --spec examples/petstore.json
+npx openapi-example-validator --spec examples/petstore.json
 ```
 
 ```
@@ -51,7 +53,7 @@ openapi 3.1.0 "Pet store": 7 of 7 example(s) checked across 2 operation(s), 0 er
 ```
 
 ```sh
-openapi-example-validator --spec examples/broken-petstore.json
+npx openapi-example-validator --spec examples/broken-petstore.json
 ```
 
 ```
@@ -72,7 +74,7 @@ description.
 A third example shows the shape of a run that is not a verdict:
 
 ```sh
-openapi-example-validator --spec examples/unresolvable.json
+npx openapi-example-validator --spec examples/unresolvable.json
 ```
 
 ```
