@@ -36,16 +36,24 @@ npm install github:edilec/openapi-example-validator
 
 This installs the public GitHub source; `openapi-example-validator` is not published to npm.
 
-After installation, run:
+From your own project, pass the path to your JSON OpenAPI description:
 
 ```sh
-npx openapi-example-validator --spec openapi.json
+npx openapi-example-validator --spec ./openapi.json
 ```
 
-## Use
+## Try the checked-in examples
+
+The sample files below belong to this source repository. To run them, first
+check out the repository and enter its directory:
 
 ```sh
-npx openapi-example-validator --spec examples/petstore.json
+git clone https://github.com/edilec/openapi-example-validator.git
+cd openapi-example-validator
+```
+
+```sh
+node bin/openapi-example-validator.mjs --spec examples/petstore.json
 ```
 
 ```
@@ -53,7 +61,7 @@ openapi 3.1.0 "Pet store": 7 of 7 example(s) checked across 2 operation(s), 0 er
 ```
 
 ```sh
-npx openapi-example-validator --spec examples/broken-petstore.json
+node bin/openapi-example-validator.mjs --spec examples/broken-petstore.json
 ```
 
 ```
@@ -74,7 +82,7 @@ description.
 A third example shows the shape of a run that is not a verdict:
 
 ```sh
-npx openapi-example-validator --spec examples/unresolvable.json
+node bin/openapi-example-validator.mjs --spec examples/unresolvable.json
 ```
 
 ```
@@ -199,6 +207,10 @@ npm run check
 
 That runs `node --check` over every file, the whole test suite, the worked
 example, and `npm pack --dry-run`.
+
+For the broader decisions around OpenAPI schemas, examples and versioning, see
+[REST API contracts before the first build](https://edilec.com/blog/km-sw-0084/rest-api-contracts-decisions-that-matter-before-the-first-build/).
+This CLI checks declared examples; it does not validate a running service.
 
 ## License
 
