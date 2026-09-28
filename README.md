@@ -31,10 +31,11 @@ fail: it says the evidence for one was not obtained.
 ## Install
 
 ```sh
-npm install github:edilec/openapi-example-validator
+npm install github:edilec/openapi-example-validator#v0.1.0
 ```
 
-This installs the public GitHub source; `openapi-example-validator` is not published to npm.
+This installs the tested public GitHub source release at `v0.1.0`;
+`openapi-example-validator` is not published to npm.
 
 From your own project, pass the path to your JSON OpenAPI description:
 
@@ -48,7 +49,7 @@ The sample files below belong to this source repository. To run them, first
 check out the repository and enter its directory:
 
 ```sh
-git clone https://github.com/edilec/openapi-example-validator.git
+git clone --branch v0.1.0 --depth 1 https://github.com/edilec/openapi-example-validator.git
 cd openapi-example-validator
 ```
 
