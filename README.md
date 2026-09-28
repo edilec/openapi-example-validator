@@ -5,6 +5,10 @@ schema that actually governs it -- the schema declared for **that media type**,
 under **that operation** -- and say plainly which examples could not be checked
 at all.
 
+For the broader decisions around OpenAPI schemas, examples and versioning, see
+Edilec's [REST API contracts guide](https://edilec.com/blog/km-sw-0084/rest-api-contracts-decisions-that-matter-before-the-first-build/).
+This CLI checks declared examples; it does not validate a running service.
+
 - **Repository:** [edilec/openapi-example-validator](https://github.com/edilec/openapi-example-validator)
 - **Area:** API & Integration
 - **License:** MIT
@@ -208,10 +212,6 @@ npm run check
 
 That runs `node --check` over every file, the whole test suite, the worked
 example, and `npm pack --dry-run`.
-
-For the broader decisions around OpenAPI schemas, examples and versioning, see
-[REST API contracts before the first build](https://edilec.com/blog/km-sw-0084/rest-api-contracts-decisions-that-matter-before-the-first-build/).
-This CLI checks declared examples; it does not validate a running service.
 
 ## License
 
